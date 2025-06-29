@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
-import { HiPlay, HiPlus, HiTrash, HiExternalLink, HiClock } from 'react-icons/hi'
+import { HiPlay, HiPlus, HiTrash, HiExternalLink, HiClock, HiX } from 'react-icons/hi'
+import { Button } from '@/components/ui/button'
+import VideoPlayer from '@/components/VideoPlayer'
 
 interface VideoHistory {
   id?: string
@@ -16,32 +18,55 @@ interface VideoHistory {
   source: 'sharepoint' | 'external'
 }
 
-export default function VideoListPage() {
+function VideoListContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [videoHistory, setVideoHistory] = useState<VideoHistory[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [newVideoUrl, setNewVideoUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [currentVideo, setCurrentVideo] = useState<VideoHistory | null>(null)
 
-  // Load video history from localStorage
+  // Kiểm tra nếu có query add=true thì hiển thị form
   useEffect(() => {
-    const history = localStorage.getItem('videoHistory')
-    if (history) {
-      setVideoHistory(JSON.parse(history))
+    if (searchParams.get('add') === 'true') {
+      setShowAddForm(true)
+    }
+  }, [searchParams])
+
+  // Kiểm tra nếu có query url thì hiển thị video
+  useEffect(() => {
+    const url = searchParams.get('url')
+    if (url) {
+      try {
+        const decodedUrl = decodeURIComponent(url)
+        const isHLS = decodedUrl.includes('.m3u8')
+        setCurrentVideo({
+          url: decodedUrl,
+          name: decodedUrl.split('/').pop() || 'External Video',
+          type: isHLS ? 'application/x-mpegURL' : 'video/*',
+          timestamp: Date.now(),
+          source: 'external'
+        })
+      } catch (error) {
+        console.error('Error decoding URL:', error)
+      }
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    // Load video history from localStorage
+    const savedHistory = localStorage.getItem('videoHistory')
+    if (savedHistory) {
+      setVideoHistory(JSON.parse(savedHistory))
     }
   }, [])
 
-  // Save to localStorage whenever history changes
-  useEffect(() => {
-    localStorage.setItem('videoHistory', JSON.stringify(videoHistory))
-  }, [videoHistory])
-
   const addToHistory = (video: VideoHistory) => {
     setVideoHistory(prev => {
-      // Remove duplicate if exists
-      const filtered = prev.filter(v => v.url !== video.url)
-      // Add new video to start of array
-      return [video, ...filtered].slice(0, 50) // Keep only last 50 videos
+      const newHistory = [video, ...prev.filter(v => v.url !== video.url)]
+      localStorage.setItem('videoHistory', JSON.stringify(newHistory))
+      return newHistory
     })
   }
 
@@ -91,6 +116,8 @@ export default function VideoListPage() {
       addToHistory(videoInfo)
       setNewVideoUrl('')
       setShowAddForm(false)
+      // Chuyển đến xem video ngay
+      setCurrentVideo(videoInfo)
     } catch (error) {
       console.error('Error adding video:', error)
       alert('Không thể thêm video. Vui lòng kiểm tra URL.')
@@ -100,7 +127,11 @@ export default function VideoListPage() {
   }
 
   const removeFromHistory = (url: string) => {
-    setVideoHistory(prev => prev.filter(v => v.url !== url))
+    setVideoHistory(prev => {
+      const newHistory = prev.filter(v => v.url !== url)
+      localStorage.setItem('videoHistory', JSON.stringify(newHistory))
+      return newHistory
+    })
   }
 
   const formatDate = (timestamp: number) => {
@@ -113,22 +144,57 @@ export default function VideoListPage() {
     }).format(timestamp)
   }
 
+  // Nếu đang xem video
+  if (currentVideo) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-4 sm:py-8">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+            <Button 
+              onClick={() => {
+                setCurrentVideo(null)
+                router.push('/video')
+              }}
+              variant="outline"
+              className="flex items-center justify-center gap-2 w-full sm:w-auto"
+            >
+              <HiX className="w-5 h-5" />
+              Đóng video
+            </Button>
+            <Button 
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto"
+            >
+              <HiPlus className="w-5 h-5" />
+              Thêm Link Video
+            </Button>
+          </div>
+          <div className="aspect-video w-full bg-black rounded-lg overflow-hidden shadow-xl">
+            <VideoPlayer
+              url={currentVideo.url}
+              type={currentVideo.type.includes('m3u8') ? 'hls' : 'video'}
+              className="w-full h-full"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-8 px-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Danh sách video
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+      <div className="container mx-auto px-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+            Video của bạn
           </h1>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+          <Button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+            className="flex items-center gap-2 w-full sm:w-auto"
           >
-            <HiPlus className="w-5 h-5 mr-2" />
-            <span>Thêm video</span>
-          </motion.button>
+            <HiPlus className="w-5 h-5" />
+            Thêm Video
+          </Button>
         </div>
 
         {/* Add Video Form */}
@@ -155,20 +221,23 @@ export default function VideoListPage() {
                   />
                 </div>
                 <div className="flex justify-end space-x-3">
-                  <button
+                  <Button
                     type="button"
-                    onClick={() => setShowAddForm(false)}
-                    className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddForm(false)
+                      setNewVideoUrl('')
+                      router.push('/video')
+                    }}
                   >
                     Hủy
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
                     disabled={isLoading}
-                    className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
                   >
                     {isLoading ? 'Đang xử lý...' : 'Thêm'}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </motion.div>
@@ -190,7 +259,7 @@ export default function VideoListPage() {
                 {/* Thumbnail */}
                 <div 
                   className="relative aspect-video bg-gray-900 cursor-pointer group"
-                  onClick={() => router.push(video.source === 'sharepoint' ? `/video/${video.id}` : `/video/external?url=${encodeURIComponent(video.url)}`)}
+                  onClick={() => setCurrentVideo(video)}
                 >
                   {video.thumbnail ? (
                     <Image
@@ -205,7 +274,13 @@ export default function VideoListPage() {
                       <HiPlay className="w-12 h-12 text-gray-500" />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center">
+                  
+                  <motion.div
+                    initial={false}
+                    animate={{ opacity: 0 }}
+                    whileHover={{ opacity: 1 }}
+                    className="absolute inset-0 flex items-center justify-center bg-black/50"
+                  >
                     <motion.div
                       initial={{ opacity: 0 }}
                       whileHover={{ opacity: 1 }}
@@ -213,7 +288,7 @@ export default function VideoListPage() {
                     >
                       <HiPlay className="w-8 h-8 text-white" />
                     </motion.div>
-                  </div>
+                  </motion.div>
                 </div>
 
                 {/* Info */}
@@ -225,21 +300,27 @@ export default function VideoListPage() {
                     <HiClock className="w-4 h-4 mr-1" />
                     <span>{formatDate(video.timestamp)}</span>
                   </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex items-center">
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className={`px-2 py-1 text-xs font-medium rounded flex items-center gap-1
+                      ${video.source === 'sharepoint' 
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                      }`}
+                    >
                       {video.source === 'sharepoint' ? (
-                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">
-                          SharePoint
-                        </span>
+                        'SharePoint'
                       ) : (
-                        <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded flex items-center">
-                          <HiExternalLink className="w-3 h-3 mr-1" />
+                        <>
+                          <HiExternalLink className="w-3 h-3" />
                           External
-                        </span>
+                        </>
                       )}
-                    </div>
+                    </span>
                     <button
-                      onClick={() => removeFromHistory(video.url)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeFromHistory(video.url)
+                      }}
                       className="p-2 text-gray-500 hover:text-red-500 transition-colors"
                       aria-label="Xóa khỏi lịch sử"
                     >
@@ -253,7 +334,7 @@ export default function VideoListPage() {
         </div>
 
         {/* Empty State */}
-        {videoHistory.length === 0 && (
+        {videoHistory.length === 0 && !showAddForm && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -263,12 +344,35 @@ export default function VideoListPage() {
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
               Chưa có video nào
             </h3>
-            <p className="text-gray-500 dark:text-gray-400">
+            <p className="text-gray-500 dark:text-gray-400 mb-6">
               Thêm video từ SharePoint hoặc URL bên ngoài để bắt đầu
             </p>
+            <Button
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center gap-2 mx-auto"
+            >
+              <HiPlus className="w-5 h-5" />
+              Thêm Video Đầu Tiên
+            </Button>
           </motion.div>
         )}
       </div>
     </div>
+  )
+}
+
+export default function VideoListPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+          </div>
+        </div>
+      </div>
+    }>
+      <VideoListContent />
+    </Suspense>
   )
 } 

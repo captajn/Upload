@@ -4,14 +4,14 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { HiOutlineMenu, HiX, HiHome, HiFilm, HiUpload, HiMoon, HiSun, HiLink, HiClock } from 'react-icons/hi'
+import { HiOutlineMenu, HiX, HiHome, HiFilm, HiUpload, HiMoon, HiSun, HiClock, HiOutlinePhotograph } from 'react-icons/hi'
 
 const menuItems = [
   { href: '/', label: 'Trang chủ', icon: HiHome },
-  { href: '/video', label: 'Danh sách video', icon: HiFilm },
-  { href: '/video/external', label: 'Xem video URL', icon: HiLink },
+  { href: '/image', label: 'Hình ảnh', icon: HiOutlinePhotograph },
+  { href: '/video', label: 'Video', icon: HiFilm },
   { href: '/history', label: 'Lịch sử xem', icon: HiClock },
-  { href: '/upload', label: 'Tải lên', icon: HiUpload, highlight: true },
+  { href: '#upload', label: 'Tải lên', icon: HiUpload, highlight: true },
 ]
 
 export default function Navbar() {
