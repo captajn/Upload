@@ -68,17 +68,11 @@ async function getSiteId() {
     const sitePath = process.env.NEXT_PUBLIC_SITE_PATH
 
     if (!domain || !sitePath) {
-      console.error('Missing env vars:', { domain, sitePath })
       throw new Error('Thiếu thông tin domain hoặc site path')
     }
 
-    // Loại bỏ dấu / ở đầu và cuối nếu có
     const cleanSitePath = sitePath.replace(/^\/+|\/+$/g, '')
-    
-    // URL format: https://graph.microsoft.com/v1.0/sites/{hostname}:/{site-path}
     const url = `https://graph.microsoft.com/v1.0/sites/${domain}:/${cleanSitePath}`
-    
-    console.log('Calling SharePoint API:', url)
     
     const response = await axios.get(url, {
       headers: {
@@ -86,8 +80,6 @@ async function getSiteId() {
         Accept: 'application/json'
       }
     })
-
-    console.log('SharePoint API Response:', response.data)
 
     if (response.data && response.data.id) {
       return response.data.id
@@ -97,20 +89,14 @@ async function getSiteId() {
 
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      console.error('SharePoint API Error Details:', {
+      console.error('SharePoint API Error:', {
         status: error.response?.status,
-        data: error.response?.data,
-        headers: error.response?.headers,
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          headers: error.config?.headers
-        }
+        data: error.response?.data
       })
     } else {
       console.error('SharePoint API Error:', error)
     }
-    throw new Error(`Lỗi khi lấy site ID: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    throw error
   }
 }
 
@@ -125,8 +111,6 @@ async function getDriveId(accessToken: string, siteId: string) {
         }
       }
     )
-
-    console.log('Drive Info:', response.data)
 
     if (!response.data || !response.data.id) {
       throw new Error('Không tìm thấy drive ID')
@@ -196,14 +180,116 @@ async function getDriveQuota(accessToken: string, siteId: string): Promise<Drive
 function getContentType(fileName: string): string {
   const ext = path.extname(fileName).toLowerCase()
   const contentTypes: Record<string, string> = {
+    // Images
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg', 
     '.png': 'image/png',
     '.gif': 'image/gif',
     '.webp': 'image/webp',
-    '.svg': 'image/svg+xml'
+    '.svg': 'image/svg+xml',
+    
+    // Documents
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    
+    // Spreadsheets
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    
+    // Presentations
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    
+    // Archives
+    '.zip': 'application/zip',
+    '.rar': 'application/x-rar-compressed',
+    '.7z': 'application/x-7z-compressed',
+    
+    // Text
+    '.txt': 'text/plain',
+    '.csv': 'text/csv',
+    '.html': 'text/html',
+    '.js': 'text/javascript',
+    '.css': 'text/css'
   }
   return contentTypes[ext] || 'application/octet-stream'
+}
+
+// Thêm hàm xử lý streaming
+async function handleStreamingRequest(request: Request, driveId: string, itemId: string, fileName: string) {
+  const accessToken = await getAccessToken()
+  const range = request.headers.get('range')
+  
+  // Lấy thông tin file
+  const fileInfo = await fetch(
+    `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    }
+  ).then(res => res.json())
+
+  const fileSize = fileInfo.size
+  const contentType = getContentType(fileName)
+
+  if (!range) {
+    // Nếu không có range header, trả về toàn bộ file
+    const fileRes = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content`,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      }
+    )
+
+    if (!fileRes.ok) {
+      throw new Error('Không thể tải file')
+    }
+
+    return new Response(fileRes.body, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': fileSize.toString(),
+        'Accept-Ranges': 'bytes',
+        'Content-Disposition': `inline; filename="${fileName}"`,
+        'Cache-Control': 'public, max-age=3600'
+      }
+    })
+  }
+
+  // Xử lý range request cho video streaming
+  const start = Number(range.replace(/bytes=/, '').split('-')[0])
+  const end = Math.min(start + 1024 * 1024, fileSize - 1) // Stream 1MB chunks
+  const contentLength = end - start + 1
+
+  const fileRes = await fetch(
+    `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Range': `bytes=${start}-${end}`
+      }
+    }
+  )
+
+  if (!fileRes.ok) {
+    throw new Error('Không thể tải file')
+  }
+
+  return new Response(fileRes.body, {
+    status: 206,
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': contentLength.toString(),
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Disposition': `inline; filename="${fileName}"`,
+      'Cache-Control': 'no-cache'
+    }
+  })
 }
 
 // API Routes
@@ -211,7 +297,6 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url)
     
-    // Xử lý proxy-file nếu có query parameter
     if (url.searchParams.has('proxy-file')) {
       const filePath = url.searchParams.get('proxy-file')
       if (!filePath) {
@@ -224,8 +309,16 @@ export async function GET(request: NextRequest) {
         return new Response('Invalid file path', { status: 400 })
       }
 
-      const accessToken = await getAccessToken()
+      const contentType = getContentType(fileName)
+      const isStreamable = contentType.startsWith('video/') || contentType.startsWith('audio/')
+      
+      // Nếu là video/audio hoặc có range header, xử lý streaming
+      if (isStreamable || request.headers.get('range')) {
+        return handleStreamingRequest(request, driveId, itemId, fileName)
+      }
 
+      // Các file khác xử lý download bình thường
+      const accessToken = await getAccessToken()
       const fileRes = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content`,
         {
@@ -248,11 +341,11 @@ export async function GET(request: NextRequest) {
       }
 
       const fileBuffer = await fileRes.arrayBuffer()
-      const contentType = getContentType(fileName)
       
       return new Response(fileBuffer, {
         headers: {
           'Content-Type': contentType,
+          'Content-Disposition': `attachment; filename="${fileName}"`,
           'Cache-Control': 'public, max-age=3600',
           'ETag': `"${driveId}_${itemId}"`,
           'Access-Control-Allow-Origin': '*'
@@ -312,10 +405,10 @@ export async function POST(request: NextRequest) {
   try {
     const url = new URL(request.url)
     
-    // Xử lý upload file
     if (url.searchParams.has('upload')) {
       const formData = await request.formData()
       const file = formData.get('file') as File
+      const folder = formData.get('folder') as string
       
       if (!file) {
         return new Response(JSON.stringify({ error: 'Không có file được tải lên' }), {
@@ -324,19 +417,20 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      console.log('Uploading file:', {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      })
+      if (!folder) {
+        return new Response(JSON.stringify({ error: 'Không có thông tin folder' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
 
       const accessToken = await getAccessToken()
       const siteId = await getSiteId()
       const driveId = await getDriveId(accessToken, siteId)
 
-      // Upload file vào thư mục Images
+      // Sử dụng folder được chọn thay vì hardcode 'Images'
       const uploadRes = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/Images/${file.name}:/content`,
+        `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${folder}/${file.name}:/content`,
         {
           method: 'PUT',
           headers: {
@@ -349,7 +443,6 @@ export async function POST(request: NextRequest) {
 
       if (!uploadRes.ok) {
         const errorText = await uploadRes.text()
-        console.error('Upload error response:', errorText)
         let errorMessage = 'Lỗi khi tải file lên SharePoint'
         try {
           const errorJson = JSON.parse(errorText)
@@ -361,7 +454,6 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await uploadRes.json()
-      console.log('Upload success:', result)
 
       return new Response(JSON.stringify({
         url: result.webUrl,

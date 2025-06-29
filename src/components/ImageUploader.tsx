@@ -3,9 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
-import { FiUpload, FiX, FiCopy, FiCheck, FiImage } from 'react-icons/fi'
+import { FiUpload, FiX, FiCopy, FiCheck, FiImage, FiFileText } from 'react-icons/fi'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
+import { FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileArchive } from 'react-icons/fa'
 
 // Thêm type definitions
 interface UploadedImage {
@@ -14,6 +15,8 @@ interface UploadedImage {
   name: string
   itemId: string
   driveId?: string
+  type: string
+  size: number
 }
 
 interface UploadProgress {
@@ -21,6 +24,8 @@ interface UploadProgress {
   progress: number
   status: 'uploading' | 'success' | 'error'
   error?: string
+  type: string
+  size: number
 }
 
 interface CopyStatus {
@@ -28,8 +33,20 @@ interface CopyStatus {
   status: 'copied' | 'error'
 }
 
-// Thêm type cho component
-const ImageUploader: React.FC = () => {
+// Thêm các định dạng file được hỗ trợ
+const SUPPORTED_FILE_TYPES = {
+  'image': ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
+  'document': ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  'spreadsheet': ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  'presentation': ['application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  'archive': ['application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed'],
+  'text': ['text/plain', 'text/csv', 'text/html', 'text/javascript', 'text/css']
+}
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Đổi tên component
+const FileUploader: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -42,21 +59,39 @@ const ImageUploader: React.FC = () => {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files)
-      setSelectedFiles(files)
       
-      // Tạo và lưu trữ object URLs
-      const urls = files.map(file => URL.createObjectURL(file))
+      // Kiểm tra kích thước và định dạng file
+      const validFiles = files.filter(file => {
+        if (file.size > MAX_FILE_SIZE) {
+          alert(`File ${file.name} vượt quá kích thước cho phép (50MB)`)
+          return false
+        }
+        
+        const isSupported = Object.values(SUPPORTED_FILE_TYPES).flat().includes(file.type)
+        if (!isSupported) {
+          alert(`Định dạng file ${file.name} không được hỗ trợ`)
+          return false
+        }
+        
+        return true
+      })
+
+      setSelectedFiles(validFiles)
+      
+      // Tạo và lưu trữ object URLs cho preview
+      const urls = validFiles.map(file => URL.createObjectURL(file))
       setObjectUrls(prev => {
-        // Revoke old URLs để tránh memory leak
         prev.forEach(url => URL.revokeObjectURL(url))
         return urls
       })
 
       // Khởi tạo progress cho mỗi file
-      setUploadProgress(files.map(file => ({
+      setUploadProgress(validFiles.map(file => ({
         fileName: file.name,
         progress: 0,
-        status: 'uploading'
+        status: 'uploading',
+        type: file.type,
+        size: file.size
       })))
     }
   }, [])
@@ -80,7 +115,9 @@ const ImageUploader: React.FC = () => {
       setUploadProgress(files.map(file => ({
         fileName: file.name,
         progress: 0,
-        status: 'uploading'
+        status: 'uploading',
+        type: file.type,
+        size: file.size
       })))
     }
   }, [])
@@ -164,7 +201,9 @@ const ImageUploader: React.FC = () => {
         publicUrl,
         name: file.name,
         itemId: data.itemId,
-        driveId: data.driveId
+        driveId: data.driveId,
+        type: file.type,
+        size: file.size
       }
 
       setUploadedImages(prev => [...prev, newImage])
@@ -255,7 +294,7 @@ const ImageUploader: React.FC = () => {
           onChange={handleFileSelect}
           className="hidden"
           multiple
-          accept="image/*"
+          accept={Object.values(SUPPORTED_FILE_TYPES).flat().join(',')}
         />
         
         <motion.div 
@@ -282,7 +321,10 @@ const ImageUploader: React.FC = () => {
               {isDragging ? 'Thả để tải lên' : 'Kéo thả hoặc chọn file'}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Hỗ trợ PNG, JPG, GIF, WEBP
+              Hỗ trợ nhiều định dạng: Ảnh, PDF, Word, Excel, PowerPoint, ZIP, Text...
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              Tối đa 50MB mỗi file
             </p>
           </div>
           <button
@@ -334,8 +376,8 @@ const ImageUploader: React.FC = () => {
                   exit={{ opacity: 0, x: 20 }}
                   className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 flex items-center space-x-4"
                 >
-                  <div className="w-12 h-12 relative rounded overflow-hidden bg-gray-200 dark:bg-gray-700">
-                    {objectUrls[index] && (
+                  <div className="w-12 h-12 relative rounded overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                    {file.type.startsWith('image/') ? (
                       <Image
                         src={objectUrls[index]}
                         alt={file.name}
@@ -343,19 +385,28 @@ const ImageUploader: React.FC = () => {
                         className="object-cover"
                         unoptimized
                       />
+                    ) : (
+                      <FileTypeIcon type={file.type} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                      {file.name}
-                    </p>
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {file.name}
+                      </p>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        ({formatFileSize(file.size)})
+                      </span>
+                    </div>
                     <div className="mt-1 relative pt-1">
                       <Progress 
                         value={uploadProgress[index]?.progress || 0}
                         indicatorColor={
                           uploadProgress[index]?.status === 'error' 
-                            ? 'bg-red-200 dark:bg-red-900/30' 
-                            : 'bg-gray-200 dark:bg-gray-700'
+                            ? 'bg-red-500' 
+                            : uploadProgress[index]?.status === 'success'
+                            ? 'bg-emerald-500'
+                            : 'bg-blue-500'
                         }
                       />
                     </div>
@@ -378,7 +429,7 @@ const ImageUploader: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Uploaded Images */}
+      {/* Uploaded Files */}
       <AnimatePresence>
         {uploadedImages.length > 0 && (
           <motion.div
@@ -388,9 +439,9 @@ const ImageUploader: React.FC = () => {
             className="space-y-4"
           >
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Ảnh đã tải lên ({uploadedImages.length})
+              File đã tải lên ({uploadedImages.length})
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {uploadedImages.map((image, index) => (
                 <motion.div
                   key={index}
@@ -401,13 +452,19 @@ const ImageUploader: React.FC = () => {
                 >
                   <Card className="overflow-hidden bg-white dark:bg-gray-800 h-full flex flex-col">
                     <div className="relative h-48 bg-gray-100 dark:bg-gray-700 group">
-                      <Image 
-                        src={image.publicUrl || image.url} 
-                        alt={image.name}
-                        fill
-                        className="object-contain"
-                        unoptimized
-                      />
+                      {image.type?.startsWith('image/') ? (
+                        <Image 
+                          src={image.publicUrl || image.url} 
+                          alt={image.name}
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <FileTypeIcon type={image.type} size="large" />
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                         <motion.button
                           whileHover={{ scale: 1.1 }}
@@ -420,9 +477,14 @@ const ImageUploader: React.FC = () => {
                       </div>
                     </div>
                     <div className="p-3 flex-1 flex flex-col">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate mb-2">
-                        {image.name}
-                      </p>
+                      <div className="flex items-center space-x-2 mb-2">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {image.name}
+                        </p>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          ({formatFileSize(image.size)})
+                        </span>
+                      </div>
                       <div className="mt-auto">
                         <button
                           onClick={() => handleCopyUrl(image)}
@@ -471,4 +533,26 @@ const ImageUploader: React.FC = () => {
   )
 }
 
-export default ImageUploader 
+// Helper functions
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+const FileTypeIcon = ({ type, size = 'normal' }: { type: string, size?: 'normal' | 'large' }) => {
+  const iconClass = size === 'large' ? 'w-16 h-16' : 'w-8 h-8'
+  const iconColor = 'text-gray-400 dark:text-gray-500'
+
+  if (type.startsWith('image/')) return <FiImage className={`${iconClass} ${iconColor}`} />
+  if (type.includes('pdf')) return <FaFilePdf className={`${iconClass} ${iconColor}`} />
+  if (type.includes('word')) return <FaFileWord className={`${iconClass} ${iconColor}`} />
+  if (type.includes('excel') || type.includes('spreadsheet')) return <FaFileExcel className={`${iconClass} ${iconColor}`} />
+  if (type.includes('powerpoint') || type.includes('presentation')) return <FaFilePowerpoint className={`${iconClass} ${iconColor}`} />
+  if (type.includes('zip') || type.includes('compressed')) return <FaFileArchive className={`${iconClass} ${iconColor}`} />
+  return <FiFileText className={`${iconClass} ${iconColor}`} />
+}
+
+export default FileUploader 

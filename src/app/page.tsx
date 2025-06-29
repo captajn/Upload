@@ -1,8 +1,7 @@
 'use client'
 
-import ImageUploader from '../components/ImageUploader'
+import FileUploader from '../components/FileUploader'
 import StorageQuota from '../components/StorageQuota'
-import { FaGithub } from 'react-icons/fa'
 import { motion } from 'framer-motion'
 
 export default function Home() {
@@ -15,10 +14,10 @@ export default function Home() {
         className="container mx-auto px-4 py-8"
       >
         <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-center text-emerald-600 dark:text-emerald-400">
-          Upload Ảnh Siêu Tốc
+          Upload File Siêu Tốc
         </h1>
         <p className="mt-4 text-center text-gray-600 dark:text-gray-300 text-sm md:text-base">
-          Tải lên và chia sẻ ảnh của bạn một cách dễ dàng
+          Tải lên và chia sẻ file của bạn một cách dễ dàng. Hỗ trợ nhiều định dạng: Ảnh, PDF, Word, Excel, PowerPoint, ZIP...
         </p>
       </motion.div>
 
@@ -33,14 +32,14 @@ export default function Home() {
           <StorageQuota />
         </motion.div>
 
-        {/* Image Uploader */}
+        {/* File Uploader */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
           className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden"
         >
-          <ImageUploader />
+          <FileUploader />
         </motion.div>
       </div>
 
@@ -48,53 +47,12 @@ export default function Home() {
       <motion.footer 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="container mx-auto px-4 py-6 md:py-8 text-center"
+        transition={{ delay: 0.3 }}
+        className="container mx-auto px-4 py-8 text-center text-gray-600 dark:text-gray-400"
       >
-        <div className="flex flex-col items-center justify-center space-y-4">
-          <motion.div
-            animate={{ 
-              rotate: [0, 10, -10, 10, 0],
-              scale: [1, 1.1, 1]
-            }}
-            transition={{ 
-              duration: 2,
-              repeat: Infinity,
-              repeatDelay: 3
-            }}
-            className="text-2xl md:text-3xl font-bold text-emerald-500 dark:text-emerald-400"
-          >
-            🌟 Web up ảnh by Chibi 🌟
-          </motion.div>
-          
-          <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
-            Dev lỏ số 1 thế giới 
-            <motion.span
-              animate={{ 
-                scale: [1, 1.2, 1],
-                rotate: [0, 5, -5, 5, 0]
-              }}
-              transition={{ 
-                duration: 1.5,
-                repeat: Infinity,
-                repeatDelay: 2
-              }}
-              className="inline-block ml-2"
-            >
-              🚀
-            </motion.span>
-          </p>
-
-          <a 
-            href="https://github.com/yourusername"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center space-x-2 text-sm md:text-base text-gray-600 dark:text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
-          >
-            <FaGithub className="w-4 h-4 md:w-5 md:h-5" />
-            <span>GitHub</span>
-          </a>
-        </div>
+        <p className="text-sm">
+          © 2024 Upload File App. Tất cả quyền được bảo lưu.
+        </p>
       </motion.footer>
     </main>
   )
