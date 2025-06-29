@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import VideoPlayer from '@/components/VideoPlayer'
 import { Button } from '@/components/ui/button'
-import { HiVideoCamera, HiArrowLeft } from 'react-icons/hi'
+import { HiVideoCamera, HiArrowLeft, HiPlus } from 'react-icons/hi'
 
 function ExternalVideoContent() {
   const router = useRouter()
@@ -38,26 +38,55 @@ function ExternalVideoContent() {
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             Vui lòng thêm link video vào URL hoặc quay lại trang danh sách để chọn video
           </p>
-          <Button 
-            onClick={() => router.push('/video')}
-            className="flex items-center justify-center gap-2"
-          >
-            <HiArrowLeft className="w-5 h-5" />
-            Quay lại danh sách
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button 
+              onClick={() => router.push('/video')}
+              variant="outline"
+              className="flex items-center justify-center gap-2"
+            >
+              <HiArrowLeft className="w-5 h-5" />
+              Quay lại danh sách
+            </Button>
+            <Button 
+              onClick={() => router.push('/video?add=true')}
+              className="flex items-center justify-center gap-2"
+            >
+              <HiPlus className="w-5 h-5" />
+              Thêm Link Video
+            </Button>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="aspect-video w-full">
-        <VideoPlayer
-          url={videoUrl}
-          type={isHLS ? 'hls' : 'video'}
-          className="w-full h-full"
-        />
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-4 sm:py-8">
+      <div className="container mx-auto px-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+          <Button 
+            onClick={() => router.push('/video')}
+            variant="outline"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto"
+          >
+            <HiArrowLeft className="w-5 h-5" />
+            Quay lại danh sách
+          </Button>
+          <Button 
+            onClick={() => router.push('/video?add=true')}
+            className="flex items-center justify-center gap-2 w-full sm:w-auto"
+          >
+            <HiPlus className="w-5 h-5" />
+            Thêm Link Video
+          </Button>
+        </div>
+        <div className="aspect-video w-full bg-black rounded-lg overflow-hidden shadow-xl">
+          <VideoPlayer
+            url={videoUrl}
+            type={isHLS ? 'hls' : 'video'}
+            className="w-full h-full"
+          />
+        </div>
       </div>
     </div>
   )
