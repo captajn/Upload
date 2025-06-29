@@ -44,6 +44,19 @@ async function getAccessToken() {
     domain: process.env.NEXT_PUBLIC_SHAREPOINT_DOMAIN || ''
   }
 
+  // Validate required configuration
+  if (!config.tenantId || config.tenantId === 'your-tenant-id') {
+    throw new Error('NEXT_PUBLIC_TENANT_ID is missing or not configured. Please check your .env file.')
+  }
+  
+  if (!config.clientId || config.clientId === 'your-client-id') {
+    throw new Error('NEXT_PUBLIC_CLIENT_ID is missing or not configured. Please check your .env file.')
+  }
+  
+  if (!config.clientSecret || config.clientSecret === 'your-client-secret') {
+    throw new Error('SHAREPOINT_CLIENT_SECRET is missing or not configured. Please check your .env file.')
+  }
+
   const tokenEndpoint = `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/token`
   const scope = 'https://graph.microsoft.com/.default'
 
@@ -53,22 +66,45 @@ async function getAccessToken() {
   params.append('client_secret', config.clientSecret)
   params.append('scope', scope)
 
-  const response = await axios.post(tokenEndpoint, params)
-  const token = response.data.access_token
+  try {
+    const response = await axios.post(tokenEndpoint, params)
+    const token = response.data.access_token
 
-  cachedToken = token
-  tokenExpiry = now + 55 * 60 * 1000 // 55 phút
+    if (!token) {
+      throw new Error('No access token received from Microsoft')
+    }
+    cachedToken = token
+    tokenExpiry = now + 55 * 60 * 1000 // 55 phút
 
-  return token
+    return token
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+      const errorData = error.response?.data
+      
+      if (status === 404) {
+        throw new Error(`Invalid tenant ID "${config.tenantId}". Please verify your NEXT_PUBLIC_TENANT_ID in the .env file.`)
+      } else if (status === 401) {
+        throw new Error('Invalid client credentials. Please verify your NEXT_PUBLIC_CLIENT_ID and SHAREPOINT_CLIENT_SECRET in the .env file.')
+      } else {
+        throw new Error(`Microsoft authentication failed: ${errorData?.error_description || error.message}`)
+      }
+    }
+    throw error
+  }
 }
 
 async function getSiteId() {
   try {
-    const domain = process.env.NEXT_PUBLIC_SHAREPOINT_DOMAIN
     const sitePath = process.env.NEXT_PUBLIC_SITE_PATH
+    const domain = process.env.NEXT_PUBLIC_SHAREPOINT_DOMAIN
 
     if (!domain || !sitePath) {
-      throw new Error('Thiếu thông tin domain hoặc site path')
+      throw new Error('NEXT_PUBLIC_SHAREPOINT_DOMAIN and NEXT_PUBLIC_SITE_PATH are required. Please check your .env file.')
+    }
+
+    if (domain === 'your-domain.sharepoint.com' || sitePath === '/sites/your-site') {
+      throw new Error('Please update your SharePoint configuration in the .env file. Default placeholder values are still being used.')
     }
 
     const cleanSitePath = sitePath.replace(/^\/+|\/+$/g, '')
