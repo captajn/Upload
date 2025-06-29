@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import VideoPlayer from '@/components/VideoPlayer'
 import { HiArrowLeft, HiDownload } from 'react-icons/hi'
@@ -15,8 +15,11 @@ interface VideoInfo {
   isHLS?: boolean
 }
 
-export default function VideoPage() {
-  const params = useParams()
+interface VideoPageProps {
+  params: { id: string }
+}
+
+function VideoPageContent({ params }: VideoPageProps) {
   const router = useRouter()
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -150,4 +153,8 @@ export default function VideoPage() {
       </AnimatePresence>
     </div>
   )
-} 
+}
+
+export default function VideoPage({ params }: VideoPageProps) {
+  return <VideoPageContent params={params} />
+}
