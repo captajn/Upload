@@ -85,23 +85,23 @@ const StatsCounter = ({ end, label, icon: Icon }: StatsCounterProps) => {
       whileInView={{ scale: 1, opacity: 1 }}
       viewport={{ once: true }}
       transition={{ type: "spring", stiffness: 100, delay: 0.2 }}
-      className="text-center p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20"
+      className="text-center p-6 backdrop-blur-md rounded-2xl border border-white/20 bg-white/80 dark:bg-black/20"
     >
       <motion.div
         animate={{ rotate: [0, 10, -10, 0] }}
         transition={{ duration: 2, repeat: Infinity, delay: Math.random() * 2 }}
         className="inline-block"
       >
-        <Icon className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+        <Icon className="w-12 h-12 text-emerald-500 dark:text-emerald-400 mx-auto mb-4" />
       </motion.div>
       <motion.div
-        className="text-3xl font-bold text-white mb-2"
+        className="text-3xl font-bold text-gray-900 dark:text-white mb-2"
         animate={{ scale: [1, 1.05, 1] }}
         transition={{ duration: 1, repeat: Infinity }}
       >
         {count.toLocaleString()}+
       </motion.div>
-      <div className="text-emerald-200">{label}</div>
+      <div className="text-gray-600 dark:text-emerald-200">{label}</div>
     </motion.div>
   )
 }
