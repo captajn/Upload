@@ -11,7 +11,7 @@ const menuItems = [
   { href: '/video', label: 'Danh sách video', icon: HiFilm },
   { href: '/video/external', label: 'Xem video URL', icon: HiLink },
   { href: '/history', label: 'Lịch sử xem', icon: HiClock },
-  { href: '/upload', label: 'Tải lên', icon: HiUpload, highlight: true },
+  { href: '#upload', label: 'Tải lên', icon: HiUpload, highlight: true },
 ]
 
 export default function Navbar() {
