@@ -31,7 +31,6 @@ export default function Home() {
           <FileUploader />
         </motion.div>
       </div>
-      </div>
     </PageLayout>
   )
 }
