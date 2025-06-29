@@ -1,15 +1,15 @@
 'use client'
 
+import PageLayout from '@/components/PageLayout'
 import FileUploader from '@/components/FileUploader'
 import StorageQuota from '@/components/StorageQuota'
-import PageLayout from '@/components/PageLayout'
 import { motion } from 'framer-motion'
 
-export default function Home() {
+export default function UploadPage() {
   return (
     <PageLayout
-      title="Upload File Siêu Tốc"
-      description="Tải lên và chia sẻ file của bạn một cách dễ dàng. Hỗ trợ nhiều định dạng: Ảnh, PDF, Word, Excel, PowerPoint, ZIP..."
+      title="Tải lên File"
+      description="Chọn và tải lên các file của bạn. Hỗ trợ đa dạng định dạng file với giao diện thân thiện."
     >
       <div className="space-y-6 pb-8">
         {/* Storage Quota */}
@@ -30,7 +30,6 @@ export default function Home() {
         >
           <FileUploader />
         </motion.div>
-      </div>
       </div>
     </PageLayout>
   )
