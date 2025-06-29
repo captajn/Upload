@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useParams, useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
 import VideoPlayer from '@/components/VideoPlayer'
 import { HiArrowLeft, HiDownload } from 'react-icons/hi'
 import { getFullApiUrl } from '@/config/env.config'
@@ -15,25 +15,38 @@ interface VideoInfo {
   isHLS?: boolean
 }
 
-interface VideoPageProps {
-  params: { id: string }
-}
-
-function VideoPageContent({ params }: VideoPageProps) {
+export default function VideoPage() {
+  const params = useParams()
   const router = useRouter()
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [showControls, setShowControls] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchVideoInfo = async () => {
       try {
-        const response = await fetch(getFullApiUrl(`video?id=${params.id}`))
-        if (!response.ok) throw new Error('Failed to fetch video info')
+        const response = await fetch(getFullApiUrl(`sharepoint/file/${params.id}`))
         const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch video info')
+        }
+        
+        // Kiểm tra dữ liệu trả về
+        if (!data.url) {
+          throw new Error('Video URL not found')
+        }
+
+        // Kiểm tra type có phải là video không
+        if (!data.type?.startsWith('video/')) {
+          throw new Error('File này không phải là video')
+        }
+        
         setVideoInfo(data)
+        setError(null)
       } catch (error) {
         console.error('Error fetching video info:', error)
+        setError(error instanceof Error ? error.message : 'Unknown error')
       } finally {
         setIsLoading(false)
       }
@@ -44,117 +57,102 @@ function VideoPageContent({ params }: VideoPageProps) {
     }
   }, [params.id])
 
-  // Auto hide controls after 3 seconds of inactivity
-  useEffect(() => {
-    let timeout: NodeJS.Timeout
-    const handleMouseMove = () => {
-      setShowControls(true)
-      clearTimeout(timeout)
-      timeout = setTimeout(() => setShowControls(false), 3000)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('touchstart', handleMouseMove)
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('touchstart', handleMouseMove)
-      clearTimeout(timeout)
-    }
-  }, [])
-
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-black flex items-center justify-center">
-        <motion.div
-          className="w-16 h-16 border-4 border-emerald-500 rounded-full border-t-transparent"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        />
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-8">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="w-full aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+            <motion.div
+              className="w-16 h-16 border-4 border-emerald-500 rounded-full border-t-transparent"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            />
+          </div>
+        </div>
       </div>
     )
   }
 
-  if (!videoInfo) {
+  if (error || !videoInfo) {
     return (
-      <div className="fixed inset-0 bg-black flex items-center justify-center">
-        <div className="text-white text-xl">Video không tồn tại hoặc đã bị xóa</div>
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-8">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="w-full aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg flex flex-col items-center justify-center">
+            <div className="text-gray-500 dark:text-gray-400 text-xl mb-4 text-center">
+              <div className="mb-2">⚠️</div>
+              {error || 'Video không tồn tại hoặc đã bị xóa'}
+            </div>
+            <button
+              onClick={() => router.back()}
+              className="flex items-center text-emerald-500 hover:text-emerald-600 transition-colors"
+            >
+              <HiArrowLeft className="w-5 h-5 mr-2" />
+              Quay lại
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="fixed inset-0 bg-black">
-      {/* Video Player */}
-      <div className="w-full h-full">
-        <VideoPlayer
-          url={videoInfo.url}
-          type="video"
-          className="w-full h-full"
-          options={{
-            autoSize: false,
-            autoMini: false,
-            fullscreen: true,
-            playbackRate: true,
-            aspectRatio: true,
-            setting: true,
-            hotkey: true,
-            pip: true,
-            theme: '#10b981',
-            moreVideoAttr: {
-              playsInline: true,
-              preload: 'auto',
-              autoplay: true
-            },
-            type: videoInfo.isHLS ? 'hls' : 'normal'
-          }}
-        />
-      </div>
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-8">
+      <div className="max-w-5xl mx-auto px-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => router.back()}
+            className="flex items-center text-gray-700 dark:text-gray-200 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
+            aria-label="Quay lại trang trước"
+          >
+            <HiArrowLeft className="w-6 h-6" />
+          </motion.button>
+          <motion.a
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            href={videoInfo.publicUrl}
+            download={videoInfo.name}
+            className="flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+          >
+            <HiDownload className="w-5 h-5 mr-2" />
+            <span>Tải xuống</span>
+          </motion.a>
+        </div>
 
-      {/* Controls Overlay */}
-      <AnimatePresence>
-        {showControls && (
-          <>
-            {/* Top Controls */}
-            <motion.div
-              initial={{ opacity: 0, y: -50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              transition={{ duration: 0.2 }}
-              className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent"
-            >
-              <div className="flex items-center justify-between max-w-7xl mx-auto">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => router.back()}
-                  className="flex items-center text-white hover:text-emerald-500 transition-colors"
-                >
-                  <HiArrowLeft className="w-6 h-6 mr-2" />
-                  <span className="hidden sm:inline">Quay lại</span>
-                </motion.button>
-                <h1 className="text-white text-lg sm:text-xl font-medium truncate mx-4">
-                  {videoInfo.name}
-                </h1>
-                <motion.a
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  href={videoInfo.publicUrl}
-                  download={videoInfo.name}
-                  className="flex items-center px-3 py-1.5 sm:px-4 sm:py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
-                >
-                  <HiDownload className="w-5 h-5 sm:mr-2" />
-                  <span className="hidden sm:inline">Tải xuống</span>
-                </motion.a>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+        {/* Video Title */}
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+          {videoInfo.name}
+        </h1>
+
+        {/* Video Player */}
+        <div className="aspect-video bg-black rounded-lg overflow-hidden">
+          <VideoPlayer
+            url={videoInfo.url}
+            type="video"
+            className="w-full h-full"
+            options={{
+              url: videoInfo.url,
+              autoSize: false,
+              autoMini: false,
+              fullscreen: true,
+              playbackRate: true,
+              aspectRatio: true,
+              setting: true,
+              hotkey: true,
+              pip: true,
+              theme: '#10b981',
+              moreVideoAttr: {
+                playsInline: true,
+                preload: 'metadata',
+                autoplay: false
+              },
+              type: videoInfo.isHLS ? 'hls' : 'normal'
+            }}
+          />
+        </div>
+      </div>
     </div>
   )
-}
-
-export default function VideoPage({ params }: VideoPageProps) {
-  return <VideoPageContent params={params} />
-}
+} 

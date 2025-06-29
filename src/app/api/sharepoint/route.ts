@@ -44,23 +44,6 @@ async function getAccessToken() {
     domain: process.env.NEXT_PUBLIC_SHAREPOINT_DOMAIN || ''
   }
 
-  // Validate required environment variables
-  if (!config.tenantId || config.tenantId === 'your_tenant_id') {
-    throw new Error('NEXT_PUBLIC_TENANT_ID is not configured. Please set it in your .env file.')
-  }
-  if (!config.clientId || config.clientId === 'your_client_id') {
-    throw new Error('NEXT_PUBLIC_CLIENT_ID is not configured. Please set it in your .env file.')
-  }
-  if (!config.clientSecret || config.clientSecret === 'your_client_secret') {
-    throw new Error('SHAREPOINT_CLIENT_SECRET is not configured. Please set it in your .env file.')
-  }
-  if (!config.domain || config.domain === 'your_domain.sharepoint.com') {
-    throw new Error('NEXT_PUBLIC_SHAREPOINT_DOMAIN is not configured. Please set it in your .env file.')
-  }
-  if (!config.sitePath || config.sitePath === '/sites/your_site_name') {
-    throw new Error('NEXT_PUBLIC_SITE_PATH is not configured. Please set it in your .env file.')
-  }
-
   const tokenEndpoint = `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/token`
   const scope = 'https://graph.microsoft.com/.default'
 
@@ -70,39 +53,13 @@ async function getAccessToken() {
   params.append('client_secret', config.clientSecret)
   params.append('scope', scope)
 
-  try {
-    const response = await axios.post(tokenEndpoint, params, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
-    })
-    
-    if (!response.data || !response.data.access_token) {
-      throw new Error('Invalid response from Microsoft OAuth endpoint')
-    }
-    
-    const token = response.data.access_token
-    
-    cachedToken = token
-    tokenExpiry = now + 55 * 60 * 1000 // 55 phút
-    
-    return token
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      // Check if response is HTML (authentication error)
-      const responseText = typeof error.response?.data === 'string' ? error.response.data : ''
-      if (responseText.includes('<!DOCTYPE html>') || responseText.includes('<html')) {
-        throw new Error('Authentication failed. Please check your SharePoint credentials and ensure your Azure AD app has the correct permissions.')
-      }
-      
-      // Handle other axios errors
-      const errorMessage = error.response?.data?.error_description || 
-                          error.response?.data?.error || 
-                          error.message
-      throw new Error(`OAuth error: ${errorMessage}`)
-    }
-    throw error
-  }
+  const response = await axios.post(tokenEndpoint, params)
+  const token = response.data.access_token
+
+  cachedToken = token
+  tokenExpiry = now + 55 * 60 * 1000 // 55 phút
+
+  return token
 }
 
 async function getSiteId() {
@@ -335,65 +292,32 @@ async function handleStreamingRequest(request: Request, driveId: string, itemId:
   })
 }
 
+async function handleProxyFile(request: Request, filePath: string) {
+  try {
+    // Parse driveId và itemId từ filePath
+    const [driveId, itemId, fileName] = decodeURIComponent(filePath).split('/')
+    
+    if (!driveId || !itemId) {
+      return new Response('Invalid file path', { status: 400 })
+    }
+
+    // Sử dụng handleStreamingRequest để xử lý file
+    return handleStreamingRequest(request, driveId, itemId, fileName)
+  } catch (error) {
+    console.error('Proxy file error:', error)
+    return new Response('Internal server error', { status: 500 })
+  }
+}
+
 // API Routes
 export async function GET(request: NextRequest) {
   try {
-    const url = new URL(request.url)
-    
-    if (url.searchParams.has('proxy-file')) {
-      const filePath = url.searchParams.get('proxy-file')
-      if (!filePath) {
-        return new Response('Missing file path', { status: 400 })
-      }
+    const { searchParams } = new URL(request.url)
 
-      const [driveId, itemId, fileName] = filePath.split('/')
-      
-      if (!driveId || !itemId || !fileName) {
-        return new Response('Invalid file path', { status: 400 })
-      }
-
-      const contentType = getContentType(fileName)
-      const isStreamable = contentType.startsWith('video/') || contentType.startsWith('audio/')
-      
-      // Nếu là video/audio hoặc có range header, xử lý streaming
-      if (isStreamable || request.headers.get('range')) {
-        return handleStreamingRequest(request, driveId, itemId, fileName)
-      }
-
-      // Các file khác xử lý download bình thường
-      const accessToken = await getAccessToken()
-      const fileRes = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
-      )
-
-      if (!fileRes.ok) {
-        const errorText = await fileRes.text()
-        let errorMessage = 'Lỗi SharePoint API'
-        try {
-          const errorJson = JSON.parse(errorText)
-          errorMessage = errorJson.error?.message || errorText
-        } catch {
-          errorMessage = errorText
-        }
-        throw new Error(errorMessage)
-      }
-
-      const fileBuffer = await fileRes.arrayBuffer()
-      
-      return new Response(fileBuffer, {
-        headers: {
-          'Content-Type': contentType,
-          'Content-Disposition': `attachment; filename="${fileName}"`,
-          'Cache-Control': 'public, max-age=3600',
-          'ETag': `"${driveId}_${itemId}"`,
-          'Access-Control-Allow-Origin': '*'
-        }
-      })
+    // Xử lý proxy file
+    if (searchParams.has('proxy-file')) {
+      const filePath = searchParams.get('proxy-file') as string
+      return handleProxyFile(request, filePath)
     }
 
     // Default GET route - trả về thông tin SharePoint
@@ -404,6 +328,7 @@ export async function GET(request: NextRequest) {
       const quotas = await getDriveQuota(accessToken, siteId)
 
       return NextResponse.json({
+        accessToken,
         quotas
       }, {
         headers: {
@@ -414,6 +339,7 @@ export async function GET(request: NextRequest) {
       console.error('SharePoint API error:', error)
       // Trả về dữ liệu mẫu khi có lỗi SharePoint API
       return NextResponse.json({
+        accessToken,
         quotas: [{
           name: "Documents",
           used: 0,

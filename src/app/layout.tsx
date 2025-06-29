@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from 'sonner'
+import Layout from "@/components/Layout";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Upload Ảnh | NextJS App",
-  description: "Ứng dụng upload ảnh với NextJS và SharePoint",
+  title: "Úp Lá File - Upload và Chia sẻ File Dễ Dàng",
+  description: "Upload và chia sẻ file của bạn một cách nhanh chóng và an toàn",
 };
 
 export default function RootLayout({
@@ -19,17 +18,7 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-            {children}
-          </main>
-          <Toaster richColors position="top-right" />
-        </ThemeProvider>
+        <Layout>{children}</Layout>
       </body>
     </html>
   );

@@ -13,11 +13,8 @@ interface FileInfo {
   type: string
 }
 
-interface PlayerPageProps {
-  params: { id: string }
-}
-
-function PlayerPageContent({ params }: PlayerPageProps) {
+export default function PlayerPage() {
+  const params = useParams()
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -108,8 +105,4 @@ function PlayerPageContent({ params }: PlayerPageProps) {
       </div>
     </div>
   )
-}
-
-export default function PlayerPage({ params }: PlayerPageProps) {
-  return <PlayerPageContent params={params} />
-}
+} 

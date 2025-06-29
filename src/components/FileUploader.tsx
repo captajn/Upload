@@ -3,12 +3,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
-import { FiX, FiCopy, FiCheck, FiImage, FiFileText, FiFolder, FiMusic, FiVideo } from 'react-icons/fi'
+import { FiX, FiCopy, FiCheck, FiImage, FiFileText, FiMusic, FiVideo } from 'react-icons/fi'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
 import { FaFilePdf, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileArchive } from 'react-icons/fa'
 import { useRouter } from 'next/navigation'
 import { getFullApiUrl } from '@/config/env.config'
+import { FOLDERS, BLOCKED_EXTENSIONS, BLOCKED_MIME_TYPES } from '@/config/constants'
 
 // Thêm type definitions
 interface UploadedFile {
@@ -36,99 +37,6 @@ interface CopyStatus {
   id: string
   status: 'copied' | 'error'
 }
-
-interface FolderConfig {
-  id: string
-  name: string
-  description: string
-  icon: React.ReactNode
-  acceptedTypes: string[]
-  maxFileSize?: number // Giới hạn kích thước riêng cho từng folder (nếu không set sẽ dùng MAX_FILE_SIZE)
-  requireAuth?: boolean // Yêu cầu xác thực để upload vào folder này
-}
-
-// Cấu hình folders
-const FOLDERS: FolderConfig[] = [
-  {
-    id: 'Images',
-    name: 'Images',
-    description: 'Ảnh: PNG, JPG, JPEG, GIF, WEBP, SVG',
-    icon: <FiImage className="w-6 h-6" />,
-    acceptedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
-  },
-  {
-    id: 'Docs',
-    name: 'Documents',
-    description: 'Tài liệu: PDF, Word, Excel, PowerPoint, Text',
-    icon: <FiFileText className="w-6 h-6" />,
-    acceptedTypes: [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'text/plain'
-    ]
-  },
-  {
-    id: 'Video',
-    name: 'Video',
-    description: 'Video: MP4, WebM, MKV, AVI, MOV',
-    icon: <FiVideo className="w-6 h-6" />,
-    acceptedTypes: ['video/mp4', 'video/webm', 'video/x-matroska', 'video/avi', 'video/quicktime']
-  },
-  {
-    id: 'Audio',
-    name: 'Audio',
-    description: 'Âm thanh: MP3, WAV, OGG, M4A, FLAC',
-    icon: <FiMusic className="w-6 h-6" />,
-    acceptedTypes: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/flac']
-  },
-  {
-    id: 'Files',
-    name: 'Files',
-    description: 'Các loại file khác (CAD, code, etc)',
-    icon: <FiFolder className="w-6 h-6" />,
-    acceptedTypes: ['*/*']
-  }
-]
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB mặc định
-
-// Thêm danh sách các file extension nguy hiểm cần chặn
-const BLOCKED_EXTENSIONS = [
-  // Shell scripts
-  '.sh', '.bash', '.ksh', '.csh', '.zsh', '.fish',
-  // Windows scripts
-  '.bat', '.cmd', '.ps1', '.psm1', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh',
-  // PHP scripts
-  '.php', '.php3', '.php4', '.php5', '.phtml',
-  // Other dangerous files
-  '.exe', '.msi', '.dll', '.bin', '.iso',
-  // Potential web shells
-  '.asp', '.aspx', '.jsp', '.jspx', '.cgi', '.pl', '.py',
-  // Config files that có thể chứa thông tin nhạy cảm
-  '.env', '.config', '.ini', '.conf'
-]
-
-// Thêm danh sách MIME types nguy hiểm
-const BLOCKED_MIME_TYPES = [
-  'application/x-msdownload',
-  'application/x-executable',
-  'application/x-dosexec',
-  'application/x-msdos-program',
-  'application/x-msi',
-  'application/x-python-code',
-  'application/x-perl',
-  'application/x-ruby',
-  'application/x-sh',
-  'application/x-shellscript',
-  'text/x-php',
-  'text/x-script',
-  'text/javascript'
-]
 
 // Thêm hàm kiểm tra file có an toàn không
 const isFileSafe = async (file: File): Promise<boolean> => {
@@ -186,13 +94,102 @@ const MediaPreview: React.FC<{
   className?: string
   title?: string
   itemId: string
-}> = ({ url, type, className, title, itemId }) => {
+  driveId?: string
+}> = ({ url, type, className, title, itemId, driveId }) => {
   const router = useRouter()
+  const [isHovered, setIsHovered] = useState(false)
+  const playerRef = useRef<HTMLDivElement>(null)
+  const artRef = useRef<Artplayer | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    // Lưu trữ tham chiếu khi effect chạy
+    const container = playerRef.current
+
+    if (isHovered && type.startsWith('video/') && driveId && container) {
+      // Tạo proxy URL cho video preview
+      const protocol = window.location.protocol
+      const host = window.location.host
+      const baseUrl = `${protocol}//${host}`
+      const proxyUrl = `${baseUrl}/api/sharepoint?proxy-file=${driveId}/${itemId}/${title}`
+
+      // Chỉ tạo player nếu component vẫn mounted
+      import('artplayer').then(({ default: ArtPlayer }) => {
+        if (!mounted || !container || artRef.current) return
+
+        try {
+          artRef.current = new ArtPlayer({
+            container,
+            url: proxyUrl,
+            volume: 0,
+            muted: true,
+            autoplay: false,
+            autoSize: false,
+            autoMini: false,
+            loop: true,
+            flip: true,
+            playbackRate: true,
+            aspectRatio: true,
+            setting: true,
+            hotkey: true,
+            pip: true,
+            theme: '#10b981',
+            poster: url,
+            moreVideoAttr: {
+              playsInline: true,
+              preload: 'none',
+              crossOrigin: 'anonymous'
+            }
+          })
+        } catch (error) {
+          console.error('Error initializing video player:', error)
+        }
+      })
+    }
+
+    return () => {
+      mounted = false
+      const player = artRef.current
+      
+      if (player && container) {
+        try {
+          player.destroy()
+          container.innerHTML = ''
+        } catch (error) {
+          console.error('Error destroying video player:', error)
+        }
+        artRef.current = null
+      }
+    }
+  }, [isHovered, url, type, driveId, itemId, title])
 
   return (
     <div 
       className={`${className} relative group cursor-pointer`}
-      onClick={() => router.push(`/player/${itemId}`)}
+      onClick={() => {
+        if (type.startsWith('video/')) {
+          router.push(`/video/${itemId}`)
+        } else if (type.startsWith('audio/')) {
+          router.push(`/player/${itemId}`)
+        }
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => {
+        setIsHovered(false)
+        // Cleanup player khi mouse leave
+        const player = artRef.current
+        const container = playerRef.current
+        
+        if (player && container) {
+          try {
+            player.destroy()
+            container.innerHTML = ''
+          } catch (error) {
+            console.error('Error destroying video player:', error)
+          }
+          artRef.current = null
+        }
+      }}
     >
       <div className="w-full h-full bg-black">
         {type.startsWith('audio/') ? (
@@ -201,25 +198,56 @@ const MediaPreview: React.FC<{
             <FiMusic className="w-16 h-16 text-emerald-500" />
           </div>
         ) : (
-          // Video preview - chỉ hiển thị thumbnail
+          // Video preview với thumbnail và preview khi hover
           <div className="w-full h-full relative">
-            <Image
-              src={`${url}&thumbnail=true`}
-              alt={title || 'Video preview'}
-              fill
-              className="object-contain"
-              unoptimized
-            />
+            {isHovered ? (
+              <div ref={playerRef} className="w-full h-full" />
+            ) : (
+              <div className="w-full h-full relative">
+                <Image
+                  src={url}
+                  alt={title || 'Video preview'}
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <motion.div
+                    initial={{ opacity: 0.8, scale: 0.8 }}
+                    animate={{ 
+                      opacity: [0.8, 1, 0.8],
+                      scale: [0.8, 0.85, 0.8]
+                    }}
+                    transition={{ 
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                    className="w-16 h-16 rounded-full bg-emerald-500/80 flex items-center justify-center"
+                  >
+                    <FiVideo className="w-8 h-8 text-white" />
+                  </motion.div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
       
       {/* Overlay khi hover */}
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-        <span className="bg-white/80 text-gray-800 px-4 py-2 rounded-lg">
-          Xem phóng to
-        </span>
-      </div>
+      <motion.div 
+        className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center"
+        initial={{ opacity: 0 }}
+        whileHover={{ opacity: 1 }}
+      >
+        <motion.span 
+          className="bg-white/90 text-gray-800 px-4 py-2 rounded-lg font-medium"
+          initial={{ y: 10, opacity: 0 }}
+          whileHover={{ y: 0, opacity: 1 }}
+        >
+          {type.startsWith('video/') ? 'Xem video' : 'Nghe nhạc'}
+        </motion.span>
+      </motion.div>
     </div>
   )
 }
@@ -313,137 +341,146 @@ const DocumentPreview: React.FC<{
   )
 }
 
-const FileUploader: React.FC = () => {
+// Thêm component ImagePreview
+const ImagePreview: React.FC<{
+  url: string
+  title?: string
+  onClose: () => void
+}> = ({ url, title, onClose }) => {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
+      <div className="relative w-full h-full max-w-5xl max-h-[90vh] m-4">
+        <div className="absolute top-4 right-4 z-10">
+          <button
+            onClick={onClose}
+            className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+          >
+            <FiX className="w-6 h-6" />
+          </button>
+        </div>
+        <div className="w-full h-full relative">
+          <Image
+            src={url}
+            alt={title || 'Image preview'}
+            fill
+            className="object-contain"
+            unoptimized
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const FileTypeIcon = ({ type, size = 'normal' }: { type: string, size?: 'normal' | 'large' }) => {
+  const iconClass = size === 'large' ? 'w-16 h-16' : 'w-8 h-8'
+  const iconColor = 'text-gray-400 dark:text-gray-500'
+
+  if (type.startsWith('image/')) return <FiImage className={`${iconClass} ${iconColor}`} />
+  if (type.includes('pdf')) return <FaFilePdf className={`${iconClass} ${iconColor}`} />
+  if (type.includes('word')) return <FaFileWord className={`${iconClass} ${iconColor}`} />
+  if (type.includes('excel') || type.includes('spreadsheet')) return <FaFileExcel className={`${iconClass} ${iconColor}`} />
+  if (type.includes('powerpoint') || type.includes('presentation')) return <FaFilePowerpoint className={`${iconClass} ${iconColor}`} />
+  if (type.includes('zip') || type.includes('compressed')) return <FaFileArchive className={`${iconClass} ${iconColor}`} />
+  return <FiFileText className={`${iconClass} ${iconColor}`} />
+}
+
+export default function FileUploader() {
+  const [selectedType, setSelectedType] = useState<string | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string>('Files')
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [objectUrls, setObjectUrls] = useState<string[]>([])
   const [copyStatus, setCopyStatus] = useState<CopyStatus | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [previewImage, setPreviewImage] = useState<{url: string, title?: string} | null>(null)
 
-  const currentFolder = FOLDERS.find(f => f.id === selectedFolder) || FOLDERS[FOLDERS.length - 1]
+  const handleFileSelect = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
 
-  // Thêm hàm helper để tự động detect folder dựa vào file type
-  const detectFileFolder = (fileType: string): string => {
-    // Kiểm tra từng folder và các accepted types
-    for (const folder of FOLDERS) {
-      if (folder.id === 'others') continue // Bỏ qua folder others
+    const file = files[0]
+    
+    // Kiểm tra an toàn trước khi upload
+    const isSafe = await isFileSafe(file)
+    if (!isSafe) {
+      alert(`File ${file.name} không được phép upload do có thể chứa mã độc`)
+      return
+    }
+
+    // Tự động phân loại file dựa vào mime type và extension
+    const fileType = getFileType(file)
+    const targetFolder = FOLDERS.find(f => f.id === fileType) || FOLDERS.find(f => f.id === 'Files')
+    
+    if (targetFolder) {
+      setSelectedFolder(targetFolder.id)
+      setSelectedType(targetFolder.id)
+
+      // Chuẩn bị file để upload
+      const validFiles = [file]
+      setSelectedFiles(validFiles)
       
-      const isAccepted = folder.acceptedTypes.some(type => {
-        if (type === fileType) return true
-        // Kiểm tra wildcard match (e.g. image/* matches image/png)
-        if (type.endsWith('/*')) {
-          const typePrefix = type.split('/')[0]
-          return fileType.startsWith(typePrefix + '/')
-        }
-        return false
+      const urls = validFiles.map(f => URL.createObjectURL(f))
+      setObjectUrls(prev => {
+        prev.forEach(url => URL.revokeObjectURL(url))
+        return urls
       })
-      
-      if (isAccepted) return folder.id
+
+      setUploadProgress(validFiles.map(f => ({
+        fileName: sanitizeFileName(f.name),
+        progress: 0,
+        status: 'uploading',
+        type: f.type,
+        size: f.size,
+        folder: targetFolder.id
+      })))
+    }
+  }, [])
+
+  const getFileType = (file: File): string => {
+    const mimeType = file.type.toLowerCase()
+    
+    // Kiểm tra mime type trước
+    for (const folder of FOLDERS) {
+      if (folder.acceptedTypes.includes(mimeType)) {
+        return folder.id
+      }
     }
     
-    return 'others' // Mặc định là others nếu không match với folder nào
-  }
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files)
+    // Kiểm tra extension nếu không match được mime type
+    const extension = file.name.split('.').pop()?.toLowerCase()
+    if (extension) {
+      // Map extension to folder
+      const extensionMap: Record<string, string> = {
+        // Images
+        'png': 'Images', 'jpg': 'Images', 'jpeg': 'Images', 'gif': 'Images', 'webp': 'Images', 'svg': 'Images',
+        // Documents
+        'pdf': 'Docs', 'doc': 'Docs', 'docx': 'Docs', 'xls': 'Docs', 'xlsx': 'Docs', 
+        'ppt': 'Docs', 'pptx': 'Docs', 'txt': 'Docs',
+        // Video
+        'mp4': 'Video', 'webm': 'Video', 'mkv': 'Video', 'avi': 'Video', 'mov': 'Video',
+        // Audio
+        'mp3': 'Audio', 'wav': 'Audio', 'ogg': 'Audio', 'm4a': 'Audio', 'flac': 'Audio',
+        // Archives
+        'zip': 'Files', 'rar': 'Files', '7z': 'Files', 'tar': 'Files', 'gz': 'Files'
+      }
       
-      // Kiểm tra an toàn cho từng file
-      Promise.all(files.map(async file => {
-        const isSafe = await isFileSafe(file)
-        if (!isSafe) {
-          alert(`File ${file.name} không được phép upload do có thể chứa mã độc`)
-          return null
-        }
-        return file
-      })).then(checkedFiles => {
-        const validFiles = checkedFiles.filter((file): file is File => 
-          file !== null && 
-          (!currentFolder?.acceptedTypes[0] || 
-           currentFolder.acceptedTypes[0] === '*/*' ||
-           currentFolder.acceptedTypes.includes(file.type))
-        )
-
-        if (validFiles.length === 0) {
-          return
-        }
-
-        // Nếu chưa chọn folder, tự động detect folder cho file đầu tiên
-        if (selectedFolder === 'Files' && validFiles.length > 0) {
-          const detectedFolder = detectFileFolder(validFiles[0].type)
-          setSelectedFolder(detectedFolder)
-        }
-
-        setSelectedFiles(validFiles)
-        
-        // Tạo và lưu trữ object URLs cho preview
-        const urls = validFiles.map(file => URL.createObjectURL(file))
-        setObjectUrls(prev => {
-          prev.forEach(url => URL.revokeObjectURL(url))
-          return urls
-        })
-
-        // Khởi tạo progress cho mỗi file với tên file đã được sanitize
-        setUploadProgress(validFiles.map(file => ({
-          fileName: sanitizeFileName(file.name),
-          progress: 0,
-          status: 'uploading',
-          type: file.type,
-          size: file.size,
-          folder: selectedFolder
-        })))
-      })
+      if (extension in extensionMap) {
+        return extensionMap[extension]
+      }
     }
-  }, [selectedFolder, currentFolder])
+    
+    return 'Files' // Default folder
+  }
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
     if (e.dataTransfer.files) {
-      const files = Array.from(e.dataTransfer.files)
-      
-      Promise.all(files.map(async file => {
-        const isSafe = await isFileSafe(file)
-        if (!isSafe) {
-          alert(`File ${file.name} không được phép upload do có thể chứa mã độc`)
-          return null
-        }
-        return file
-      })).then(checkedFiles => {
-        const validFiles = checkedFiles.filter((file): file is File => 
-          file !== null &&
-          (!currentFolder?.acceptedTypes[0] || 
-           currentFolder.acceptedTypes[0] === '*/*' ||
-           currentFolder.acceptedTypes.includes(file.type))
-        )
-
-        if (validFiles.length === 0) {
-          return
-        }
-
-        setSelectedFiles(validFiles)
-        
-        const urls = validFiles.map(file => URL.createObjectURL(file))
-        setObjectUrls(prev => {
-          prev.forEach(url => URL.revokeObjectURL(url))
-          return urls
-        })
-
-        setUploadProgress(validFiles.map(file => ({
-          fileName: sanitizeFileName(file.name),
-          progress: 0,
-          status: 'uploading',
-          type: file.type,
-          size: file.size,
-          folder: selectedFolder
-        })))
-      })
+      handleFileSelect(e.dataTransfer.files)
     }
-  }, [selectedFolder, currentFolder])
+  }, [handleFileSelect])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -599,91 +636,63 @@ const FileUploader: React.FC = () => {
   }, [objectUrls])
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Folder Selection */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {FOLDERS.map(folder => (
-          <motion.button
-            key={folder.id}
-            onClick={() => {
-              setSelectedFolder(folder.id)
-            }}
-            className={`p-4 rounded-lg flex flex-col items-center space-y-2 transition-colors ${
-              selectedFolder === folder.id
-                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-            }`}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            {folder.icon}
-            <span className="text-sm font-medium">{folder.name}</span>
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              {folder.description}
-            </p>
-          </motion.button>
-        ))}
+    <div className="space-y-6">
+      {/* File Type Selection */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+        {FOLDERS.map((folder) => {
+          return (
+            <motion.button
+              key={folder.id}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setSelectedType(folder.id)}
+              className={`p-4 rounded-lg flex flex-col items-center justify-center space-y-2 transition-colors duration-200
+                ${selectedType === folder.id
+                  ? 'bg-emerald-50 border-2 border-emerald-500 dark:bg-emerald-900/20 dark:border-emerald-400'
+                  : 'bg-white border-2 border-gray-200 hover:border-emerald-500 dark:bg-gray-800 dark:border-gray-700 dark:hover:border-emerald-400'
+                }`}
+            >
+              {folder.icon}
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{folder.name}</span>
+            </motion.button>
+          )
+        })}
       </div>
 
-      {/* Upload Zone */}
+      {/* Upload Area */}
       <motion.div
-        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-          isDragging 
-            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' 
-            : 'border-gray-300 dark:border-gray-600'
-        }`}
-        onDragOver={handleDragOver}
+        initial={false}
+        animate={{ borderColor: isDragging ? '#10b981' : '#e5e7eb' }}
+        className={`relative border-2 border-dashed rounded-lg p-8 text-center
+          ${isDragging ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-gray-50 dark:bg-gray-800/50'}
+        `}
+        onDragEnter={handleDragOver}
         onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
         onDrop={handleDrop}
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
       >
         <input
           type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          className="hidden"
-          multiple
-          accept={currentFolder?.acceptedTypes.join(',') || '*/*'}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          onChange={(e) => handleFileSelect(e.target.files)}
+          accept={selectedType ? FOLDERS.find(f => f.id === selectedType)?.acceptedTypes.join(',') : undefined}
         />
-        
-        <motion.div 
-          className="flex flex-col items-center justify-center space-y-4"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <motion.div 
-            className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center"
-            animate={{ 
-              scale: isDragging ? [1, 1.1, 1] : 1,
-              rotate: isDragging ? [0, -5, 5, -5, 0] : 0
-            }}
-            transition={{ 
-              duration: isDragging ? 0.5 : 0.2,
-              repeat: isDragging ? Infinity : 0,
-              repeatDelay: 0.5
-            }}
-          >
-            {currentFolder.icon}
-          </motion.div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {isDragging ? 'Thả để tải lên' : `Upload vào ${currentFolder.name}`}
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {currentFolder.description}
-            </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-              Tối đa {formatFileSize(currentFolder.maxFileSize || MAX_FILE_SIZE)} mỗi file
-            </p>
-          </div>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
-          >
+        <div className="space-y-2">
+          <p className="text-gray-600 dark:text-gray-400">
+            {selectedType ? (
+              <>
+                Upload vào {FOLDERS.find(f => f.id === selectedType)?.name}
+                <br />
+                <span className="text-sm">{FOLDERS.find(f => f.id === selectedType)?.description}</span>
+              </>
+            ) : (
+              'Chọn loại file bạn muốn tải lên'
+            )}
+          </p>
+          <button className="inline-flex items-center px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors duration-200">
             Chọn file
           </button>
-        </motion.div>
+        </div>
       </motion.div>
 
       {/* Selected Files */}
@@ -803,20 +812,33 @@ const FileUploader: React.FC = () => {
                   <Card className="overflow-hidden bg-white dark:bg-gray-800 h-full flex flex-col">
                     <div className="relative h-48 bg-gray-100 dark:bg-gray-700 group">
                       {file.type?.startsWith('image/') ? (
-                        <Image 
-                          src={file.publicUrl || file.url} 
-                          alt={file.name}
-                          fill
-                          className="object-contain"
-                          unoptimized
-                        />
+                        <>
+                          <Image 
+                            src={file.publicUrl || file.url} 
+                            alt={file.name}
+                            fill
+                            className="object-contain"
+                            unoptimized
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <motion.button
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => setPreviewImage({ url: file.publicUrl || file.url, title: file.name })}
+                              className="bg-white/80 text-gray-800 p-2 rounded-full"
+                            >
+                              <FiImage className="w-5 h-5" />
+                            </motion.button>
+                          </div>
+                        </>
                       ) : file.type?.startsWith('video/') || file.type?.startsWith('audio/') ? (
                         <MediaPreview
-                          url={file.publicUrl || file.url}
+                          url={file.url}
                           type={file.type}
                           className="w-full h-full"
                           title={file.name}
                           itemId={file.itemId}
+                          driveId={file.driveId}
                         />
                       ) : file.type?.includes('pdf') || file.type?.includes('office') ? (
                         <DocumentPreview
@@ -829,16 +851,6 @@ const FileUploader: React.FC = () => {
                           <FileTypeIcon type={file.type} size="large" />
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => window.open(file.publicUrl || file.url, '_blank')}
-                          className="bg-white/80 text-gray-800 p-2 rounded-full"
-                        >
-                          <FiImage className="w-5 h-5" />
-                        </motion.button>
-                      </div>
                     </div>
                     <div className="p-3 flex-1 flex flex-col">
                       <div className="flex items-center space-x-2 mb-2">
@@ -893,6 +905,17 @@ const FileUploader: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Image Preview Modal */}
+      <AnimatePresence>
+        {previewImage && (
+          <ImagePreview
+            url={previewImage.url}
+            title={previewImage.title}
+            onClose={() => setPreviewImage(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -904,19 +927,4 @@ const formatFileSize = (bytes: number) => {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-}
-
-const FileTypeIcon = ({ type, size = 'normal' }: { type: string, size?: 'normal' | 'large' }) => {
-  const iconClass = size === 'large' ? 'w-16 h-16' : 'w-8 h-8'
-  const iconColor = 'text-gray-400 dark:text-gray-500'
-
-  if (type.startsWith('image/')) return <FiImage className={`${iconClass} ${iconColor}`} />
-  if (type.includes('pdf')) return <FaFilePdf className={`${iconClass} ${iconColor}`} />
-  if (type.includes('word')) return <FaFileWord className={`${iconClass} ${iconColor}`} />
-  if (type.includes('excel') || type.includes('spreadsheet')) return <FaFileExcel className={`${iconClass} ${iconColor}`} />
-  if (type.includes('powerpoint') || type.includes('presentation')) return <FaFilePowerpoint className={`${iconClass} ${iconColor}`} />
-  if (type.includes('zip') || type.includes('compressed')) return <FaFileArchive className={`${iconClass} ${iconColor}`} />
-  return <FiFileText className={`${iconClass} ${iconColor}`} />
-}
-
-export default FileUploader 
+} 
