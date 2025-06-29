@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
+import { IconType } from 'react-icons'
 import FileUploader from '@/components/FileUploader'
 import StorageQuota from '@/components/StorageQuota'
 import { HiSparkles, HiCloudUpload, HiLightningBolt, HiShieldCheck, HiUsers, HiFolder } from 'react-icons/hi'
@@ -49,8 +50,14 @@ const FloatingShapes = () => {
   )
 }
 
+interface StatsCounterProps {
+  end: number
+  label: string
+  icon: IconType
+}
+
 // Stats counter component
-const StatsCounter = ({ end, label, icon: Icon }: { end: number, label: string, icon: any }) => {
+const StatsCounter = ({ end, label, icon: Icon }: StatsCounterProps) => {
   const [count, setCount] = useState(0)
 
   useEffect(() => {
@@ -89,8 +96,15 @@ const StatsCounter = ({ end, label, icon: Icon }: { end: number, label: string, 
   )
 }
 
+interface FeatureCardProps {
+  icon: IconType
+  title: string
+  description: string
+  delay: number
+}
+
 // Feature card component
-const FeatureCard = ({ icon: Icon, title, description, delay }: any) => (
+const FeatureCard = ({ icon: Icon, title, description, delay }: FeatureCardProps) => (
   <motion.div
     initial={{ y: 50, opacity: 0 }}
     whileInView={{ y: 0, opacity: 1 }}
