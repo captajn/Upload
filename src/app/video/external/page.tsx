@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import VideoPlayer from '@/components/VideoPlayer'
 import { Button } from '@/components/ui/button'
+import { HiVideoCamera, HiArrowLeft } from 'react-icons/hi'
 
 function ExternalVideoContent() {
   const router = useRouter()
@@ -28,9 +29,23 @@ function ExternalVideoContent() {
 
   if (!videoUrl) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <p className="text-red-500 mb-4">URL video không hợp lệ</p>
-        <Button onClick={() => router.back()}>Quay lại</Button>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50 dark:bg-gray-900">
+        <div className="text-center max-w-md mx-auto">
+          <HiVideoCamera className="w-16 h-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Chưa có link video
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Vui lòng thêm link video vào URL hoặc quay lại trang danh sách để chọn video
+          </p>
+          <Button 
+            onClick={() => router.push('/video')}
+            className="flex items-center justify-center gap-2"
+          >
+            <HiArrowLeft className="w-5 h-5" />
+            Quay lại danh sách
+          </Button>
+        </div>
       </div>
     )
   }
