@@ -8,28 +8,38 @@ import StorageQuota from '@/components/StorageQuota'
 import { HiSparkles, HiCloudUpload, HiLightningBolt, HiShieldCheck, HiUsers, HiFolder } from 'react-icons/hi'
 import Link from 'next/link'
 
+// Định nghĩa các hình dạng cố định
+const SHAPES = [
+  { id: 1, size: 30, x: 20, y: 15, color: 'bg-emerald-400', opacity: 0.2 },
+  { id: 2, size: 40, x: 40, y: 30, color: 'bg-blue-400', opacity: 0.15 },
+  { id: 3, size: 35, x: 60, y: 45, color: 'bg-purple-400', opacity: 0.25 },
+  { id: 4, size: 45, x: 80, y: 60, color: 'bg-pink-400', opacity: 0.2 },
+  { id: 5, size: 25, x: 10, y: 75, color: 'bg-yellow-400', opacity: 0.3 },
+  { id: 6, size: 50, x: 90, y: 20, color: 'bg-emerald-400', opacity: 0.25 },
+  { id: 7, size: 35, x: 30, y: 85, color: 'bg-blue-400', opacity: 0.2 },
+  { id: 8, size: 40, x: 70, y: 40, color: 'bg-purple-400', opacity: 0.15 },
+  { id: 9, size: 30, x: 50, y: 65, color: 'bg-pink-400', opacity: 0.25 },
+  { id: 10, size: 45, x: 15, y: 35, color: 'bg-yellow-400', opacity: 0.2 },
+  { id: 11, size: 35, x: 85, y: 80, color: 'bg-emerald-400', opacity: 0.15 },
+  { id: 12, size: 40, x: 25, y: 50, color: 'bg-blue-400', opacity: 0.3 },
+  { id: 13, size: 30, x: 65, y: 25, color: 'bg-purple-400', opacity: 0.2 },
+  { id: 14, size: 45, x: 45, y: 70, color: 'bg-pink-400', opacity: 0.25 },
+  { id: 15, size: 35, x: 75, y: 55, color: 'bg-yellow-400', opacity: 0.2 }
+]
+
 // Floating shapes component
 const FloatingShapes = () => {
-  const shapes = Array.from({ length: 15 }, (_, i) => ({
-    id: i,
-    size: Math.random() * 40 + 20,
-    initialX: Math.random() * 100,
-    initialY: Math.random() * 100,
-    color: ['bg-emerald-400', 'bg-blue-400', 'bg-purple-400', 'bg-pink-400', 'bg-yellow-400'][Math.floor(Math.random() * 5)],
-    opacity: Math.random() * 0.3 + 0.1
-  }))
-
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {shapes.map((shape) => (
+      {SHAPES.map((shape) => (
         <motion.div
           key={shape.id}
           className={`absolute rounded-full ${shape.color}`}
           style={{
             width: shape.size,
             height: shape.size,
-            left: `${shape.initialX}%`,
-            top: `${shape.initialY}%`,
+            left: `${shape.x}%`,
+            top: `${shape.y}%`,
             opacity: shape.opacity
           }}
           animate={{
@@ -39,10 +49,10 @@ const FloatingShapes = () => {
             scale: [1, 1.2, 1]
           }}
           transition={{
-            duration: Math.random() * 10 + 15,
+            duration: 15 + (shape.id % 5) * 2, // Thời gian animation khác nhau cho mỗi hình
             repeat: Infinity,
             ease: "easeInOut",
-            delay: Math.random() * 5
+            delay: shape.id * 0.2 // Delay khác nhau cho mỗi hình
           }}
         />
       ))}
