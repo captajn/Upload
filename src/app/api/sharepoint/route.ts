@@ -44,6 +44,23 @@ async function getAccessToken() {
     domain: process.env.NEXT_PUBLIC_SHAREPOINT_DOMAIN || ''
   }
 
+  // Validate required environment variables
+  if (!config.tenantId || config.tenantId === 'your_tenant_id') {
+    throw new Error('NEXT_PUBLIC_TENANT_ID is not configured. Please set it in your .env file.')
+  }
+  if (!config.clientId || config.clientId === 'your_client_id') {
+    throw new Error('NEXT_PUBLIC_CLIENT_ID is not configured. Please set it in your .env file.')
+  }
+  if (!config.clientSecret || config.clientSecret === 'your_client_secret') {
+    throw new Error('SHAREPOINT_CLIENT_SECRET is not configured. Please set it in your .env file.')
+  }
+  if (!config.domain || config.domain === 'your_domain.sharepoint.com') {
+    throw new Error('NEXT_PUBLIC_SHAREPOINT_DOMAIN is not configured. Please set it in your .env file.')
+  }
+  if (!config.sitePath || config.sitePath === '/sites/your_site_name') {
+    throw new Error('NEXT_PUBLIC_SITE_PATH is not configured. Please set it in your .env file.')
+  }
+
   const tokenEndpoint = `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/token`
   const scope = 'https://graph.microsoft.com/.default'
 
@@ -53,14 +70,41 @@ async function getAccessToken() {
   params.append('client_secret', config.clientSecret)
   params.append('scope', scope)
 
-  const response = await axios.post(tokenEndpoint, params)
-  const token = response.data.access_token
-
-  cachedToken = token
-  tokenExpiry = now + 55 * 60 * 1000 // 55 phút
-
-  return token
+  try {
+    const response = await axios.post(tokenEndpoint, params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    })
+    
+    if (!response.data || !response.data.access_token) {
+      throw new Error('Invalid response from Microsoft OAuth endpoint')
+    }
+    
+    const token = response.data.access_token
+    
+    cachedToken = token
+    tokenExpiry = now + 55 * 60 * 1000 // 55 phút
+    
+    return token
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      // Check if response is HTML (authentication error)
+      const responseText = typeof error.response?.data === 'string' ? error.response.data : ''
+      if (responseText.includes('<!DOCTYPE html>') || responseText.includes('<html')) {
+        throw new Error('Authentication failed. Please check your SharePoint credentials and ensure your Azure AD app has the correct permissions.')
+      }
+      
+      // Handle other axios errors
+      const errorMessage = error.response?.data?.error_description || 
+                          error.response?.data?.error || 
+                          error.message
+      throw new Error(`OAuth error: ${errorMessage}`)
+    }
+    throw error
+  }
 }
+
 
 async function getSiteId() {
   try {
@@ -369,19 +413,15 @@ export async function GET(request: NextRequest) {
       })
     } catch (error) {
       console.error('SharePoint API error:', error)
-      // Trả về dữ liệu mẫu khi có lỗi SharePoint API
+      
+      // Return error instead of fallback data for configuration issues
+      const errorMessage = error instanceof Error ? error.message : 'Unknown SharePoint API error'
       return NextResponse.json({
-        quotas: [{
-          name: "Documents",
-          used: 0,
-          total: 25600 * 1024 * 1024 * 1024,
-          remaining: 25600 * 1024 * 1024 * 1024,
-          usedGB: "0",
-          totalGB: "25600",
-          remainingGB: "25600",
-          percentage: 0
-        }]
+        error: 'SharePoint configuration error',
+        message: errorMessage,
+        quotas: [] // Empty array instead of fake data
       }, {
+        status: 500,
         headers: {
           'Cache-Control': 'no-store'
         }
@@ -389,9 +429,11 @@ export async function GET(request: NextRequest) {
     }
   } catch (error: unknown) {
     console.error('Token error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown authentication error'
     return NextResponse.json({
-      error: 'Lỗi xác thực',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Authentication error',
+      message: errorMessage,
+      quotas: []
     }, { 
       status: 401,
       headers: {
